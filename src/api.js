@@ -1,7 +1,8 @@
 import axios from 'axios'
 
+// Use same-origin base URL so Vite dev server proxy can forward to the backend
 const api = axios.create({
-    baseURL: 'http://localhost:8080',
+    baseURL: '/',
 })
 
 api.interceptors.request.use(
@@ -9,7 +10,7 @@ api.interceptors.request.use(
         const token = localStorage.getItem('token')
         if (token) {
             config.headers.Authorization = `Bearer ${token}`
-            config.headers['Content-Type'] = 'application/json'
+            // Let Axios set Content-Type when needed; avoid forcing it for all requests
         }
         return config
     },

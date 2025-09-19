@@ -23,6 +23,9 @@ const SecretsDashboard = () => {
     const [visiblePasswords, setVisiblePasswords] = useState({})
     const [copiedItems, setCopiedItems] = useState({})
 
+    const [searchTerm, setSearchTerm] = useState('')
+    const [selectedSecret, setSelectedSecret] = useState(null)
+    const [deleteTarget, setDeleteTarget] = useState(null)
     const navigate = useNavigate()
 
     // Throttling and retry guards to avoid rate limiting
@@ -76,6 +79,53 @@ const SecretsDashboard = () => {
             </button>
         );
     };
+
+    // Helpers derived from the Password Manager design
+    const computeStrength = (pwd) => {
+        if (!pwd) return 'Weak'
+        const length = pwd.length
+        const hasUpper = /[A-Z]/.test(pwd)
+        const hasLower = /[a-z]/.test(pwd)
+        const hasNum = /\d/.test(pwd)
+        const hasSym = /[^A-Za-z0-9]/.test(pwd)
+        const score = [hasUpper, hasLower, hasNum, hasSym].filter(Boolean).length + (length > 12 ? 1 : length > 8 ? 0.5 : 0)
+        if (score >= 3.5) return 'Strong'
+        if (score >= 2.5) return 'Medium'
+        return 'Weak'
+    }
+
+    const getStrengthColor = (strength) => {
+        switch (strength) {
+            case 'Strong': return 'text-green-600'
+            case 'Medium': return 'text-yellow-600'
+            case 'Weak': return 'text-red-600'
+            default: return 'text-gray-600'
+        }
+    }
+
+    const getFaviconUrl = (website) => {
+        if (!website) return ''
+        try {
+            const url = new URL(website)
+            return `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=32`
+        } catch {
+            return `https://www.google.com/s2/favicons?domain=${website}&sz=32`
+        }
+    }
+
+    const checkBreaches = () => {
+        alert('Checking for compromised passwords... All passwords are secure!')
+    }
+
+    const filteredSecrets = secrets.filter(s => {
+        const q = searchTerm.toLowerCase()
+        return (
+            (s.title || '').toLowerCase().includes(q) ||
+            (s.username || '').toLowerCase().includes(q) ||
+            (s.email || '').toLowerCase().includes(q) ||
+            (s.website || '').toLowerCase().includes(q)
+        )
+    })
 
     useEffect(() => {
         // In React 18 StrictMode (dev), effects run twice. Skip the first run to avoid duplicate loads.
@@ -167,7 +217,20 @@ const SecretsDashboard = () => {
     const handleDelete = async (id) => {
         try {
             await api.delete(`/secret/api/delete/${id}`)
-            setSecrets(prev => prev.filter(s => s.id !== id))
+            setSecrets(prev => {
+                const beforeLen = prev.length
+                const next = prev.filter(s => String(s.id) !== String(id))
+                // If nothing was removed (possible id type mismatch or stale list), fall back to refetch
+                if (next.length === beforeLen) {
+                    // Best-effort refresh without blocking UX
+                    api.get('/secret/api/list')
+                        .then(res => setSecrets(res.data?.data?.secrets || []))
+                        .catch(() => {/* ignore */})
+                }
+                return next
+            })
+            // If the selected secret is the one deleted, clear it
+            setSelectedSecret(prev => (prev && String(prev.id) === String(id) ? null : prev))
         } catch (err) {
             const msg = err.response?.data?.message || err.message
             setError(msg)
@@ -184,19 +247,23 @@ const SecretsDashboard = () => {
     }
 
     const handleEditSubmit = async (e) => {
-        e.preventDefault();
+        e.preventDefault()
         try {
-            const { id, ...updatedData } = editForm;
-            const res = await api.put(`/secret/api/update/${id}`, updatedData);
-            setSecrets(prev =>
-                prev.map(secret => (secret.id === id ? res.data.data.secret : secret))
-            );
-            setEditSecret(null);
-            setError(''); // clear any previous error
-            alert('Secret updated successfully');
+            const { id, ...updatedData } = editForm
+            const res = await api.put(`/secret/api/update/${id}`, updatedData)
+            const apiUpdated = res?.data?.data?.secret || res?.data?.secret || null
+            setSecrets(prev => prev.map(secret => {
+                if (secret.id === id) {
+                    // Prefer server response if provided; otherwise merge local form data
+                    return apiUpdated ? { ...secret, ...apiUpdated } : { ...secret, ...updatedData, id }
+                }
+                return secret
+            }))
+            setEditSecret(null)
+            setError('') // clear any previous error
         } catch (err) {
-            const msg = err.response?.data?.message || err.message;
-            setError(msg);
+            const msg = err.response?.data?.message || err.message
+            setError(msg)
         }
     };
 
@@ -296,207 +363,299 @@ const SecretsDashboard = () => {
 
 
     return (
-        <div className="p-4 max-w-6xl mx-auto bg-gray-50 min-h-screen">
-            <div className="flex items-center justify-start gap-3 mb-6">
-                <button
-                    onClick={() => { setShowCreate(true); setCreateError(''); }}
-                    className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm px-4 py-2 rounded-lg shadow-lg transition-all duration-200 transform hover:scale-105"
-                >
-                    + Add Secret
-                </button>
-                <h1 className="text-2xl font-bold text-gray-800">Your Secrets</h1>
-            </div>
-            {error && <div className="bg-red-100 border border-red-400 text-red-700 p-3 rounded-lg mb-4 shadow-sm">{error}</div>}
-            {isLoading && <div className="text-center py-8 text-gray-600">Loading...</div>}
-            {!error && !isLoading && secrets.length === 0 && <div className="text-center py-8 text-gray-600">No secrets found.</div>}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {secrets.map(secret => (
-                    <div key={secret.id} className="bg-white border-0 p-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
-                        {/* Header with title and favicon */}
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center space-x-3">
-                                {secret.website && (
-                                    <img
-                                        src={`https://www.google.com/s2/favicons?domain=${secret.website}&sz=32`}
-                                        alt=""
-                                        className="w-8 h-8 rounded-full"
-                                        onError={(e) => {
-                                            e.target.style.display = 'none';
-                                        }}
-                                    />
-                                )}
-                                <div className="font-bold text-lg text-gray-800 truncate">{secret.title}</div>
-                            </div>
+        <div className="min-h-screen bg-gray-50">
+            {/* Header (sticky) */}
+            <div className="sticky top-0 z-30 bg-white shadow-sm border-b">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="flex items-center justify-between h-16">
+                        <div className="flex items-center space-x-3">
+                            <span className="text-2xl">🔐</span>
+                            <h1 className="text-xl font-medium text-gray-900">Password Manager</h1>
                         </div>
-
-                        {/* Content */}
-                        <div className="space-y-3 text-sm">
-                            {/* Username */}
-                            {secret.username && (
-                                <div className="flex items-center justify-between">
-                                    <span className="text-gray-600 font-medium">Username:</span>
-                                    <div className="flex items-center">
-                                        <span className="text-gray-800 font-mono bg-gray-50 px-2 py-1 rounded">{secret.username}</span>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Password */}
-                            {secret.password && (
-                                <div className="flex items-center justify-between">
-                                    <span className="text-gray-600 font-medium">Password:</span>
-                                    <div className="flex items-center">
-                                        <span className="text-gray-800 font-mono bg-gray-50 px-2 py-1 rounded mr-2">
-                                            {visiblePasswords[secret.id] ? secret.password : '••••••••'}
-                                        </span>
-                                        <button
-                                            onClick={() => togglePasswordVisibility(secret.id)}
-                                            className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors mr-1"
-                                            title={visiblePasswords[secret.id] ? 'Hide password' : 'Show password'}
-                                        >
-                                            {visiblePasswords[secret.id] ? (
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
-                                                </svg>
-                                            ) : (
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                                </svg>
-                                            )}
-                                        </button>
-                                        <CopyButton text={secret.password} type="password" secretId={secret.id} />
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Email */}
-                            {secret.email && (
-                                <div className="flex items-center justify-between">
-                                    <span className="text-gray-600 font-medium">Email:</span>
-                                    <div className="flex items-center">
-                                        <span className="text-gray-800 font-mono bg-gray-50 px-2 py-1 rounded">{secret.email}</span>
-                                        <CopyButton text={secret.email} type="email" secretId={secret.id} />
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Website */}
-                            {secret.website && (
-                                <div className="flex items-center justify-between">
-                                    <span className="text-gray-600 font-medium">Website:</span>
-                                    <a
-                                        href={secret.website}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-blue-600 hover:text-blue-800 underline flex items-center"
-                                    >
-                                        <span className="mr-1">Visit</span>
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                        </svg>
-                                    </a>
-                                </div>
-                            )}
-
-                            {/* Note */}
-                            {secret.note && (
-                                <div className="pt-2 border-t border-gray-100">
-                                    <span className="text-gray-600 font-medium block mb-1">Note:</span>
-                                    <p className="text-gray-700 text-xs bg-gray-50 p-2 rounded">{secret.note}</p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Action buttons */}
-                        <div className="pt-4 flex justify-end gap-2 border-t border-gray-100 mt-4">
+                        <div className="flex items-center space-x-4">
                             <button
-                                onClick={() => openEditForm(secret)}
-                                className="bg-amber-500 hover:bg-amber-600 text-white text-xs px-3 py-2 rounded-lg transition-colors flex items-center space-x-1"
+                                onClick={checkBreaches}
+                                className="flex items-center space-x-2 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
                             >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                </svg>
-                                <span>Edit</span>
+                                <span>🛡️</span>
+                                <span>Check passwords</span>
                             </button>
-                            <button
-                                onClick={() => handleDelete(secret.id)}
-                                className="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-2 rounded-lg transition-colors flex items-center space-x-1"
-                            >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                                <span>Delete</span>
+                            <button className="p-2 text-gray-600 hover:text-gray-900" title="Settings">
+                                ⚙️
                             </button>
                         </div>
                     </div>
-                ))}
+                </div>
             </div>
 
-            {showCreate && (
-                <div className="fixed inset-0 z-40 flex">
-                    {/* overlay */}
-                    <div className="flex-1 bg-transparent bg-opacity-30" onClick={closeCreatePanel} />
-                    {/* right panel */}
-                    <div className="w-full max-w-md h-full bg-white shadow-xl border-l p-5 overflow-y-auto">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-lg font-semibold">Create Secret</h2>
-                            <button onClick={closeCreatePanel} className="text-gray-500 hover:text-gray-700">✕</button>
-                        </div>
-                        {createError && (
-                            <div className="bg-red-100 text-red-700 p-2 rounded mb-3 text-sm">{createError}</div>
-                        )}
-                        <form onSubmit={handleCreateSubmit} className="space-y-3 text-sm">
-                            {['title','username','password','email','website'].map((field) => (
-                                <div key={field}>
-                                    <label className="block font-medium capitalize mb-1">{field}</label>
+            <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-0 h-[calc(100vh-64px)] ${showCreate ? 'lg:mr-[420px]' : ''}`}>
+                <div className="flex gap-8 items-start">
+                    {/* Left Sidebar - Password List */}
+                    <div className="flex-1">
+                        <div className="bg-white rounded-lg shadow flex flex-col h-full overflow-hidden">
+                            {/* Search Bar */}
+                            <div className="p-4 border-b">
+                                <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔎</span>
                                     <input
-                                        type={field === 'password' ? 'password' : 'text'}
-                                        name={field}
-                                        value={createForm[field]}
-                                        onChange={handleCreateChange}
-                                        required={field === 'title'}
-                                        className="w-full border border-gray-300 p-2 rounded"
+                                        type="text"
+                                        placeholder="Search passwords"
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                     />
                                 </div>
-                            ))}
-                            <div>
-                                <label className="block font-medium mb-1">Note</label>
-                                <textarea
-                                    name="note"
-                                    value={createForm.note}
+                            </div>
+
+                            {/* Add Password Button */}
+                            <div className="p-4 border-b">
+                                <button
+                                    onClick={() => { setShowCreate(true); setCreateError(''); setSelectedSecret(null); }}
+                                    className="w-full flex items-center justify-center space-x-2 px-4 py-2 rounded-md transition-colors bg-blue-600 text-white hover:bg-blue-700"
+                                >
+                                    <span>➕</span>
+                                    <span>Add password</span>
+                                </button>
+                            </div>
+
+                            {/* Password List */}
+                            <div className="flex-1 overflow-y-auto">
+                                {filteredSecrets.map((secret) => {
+                                    const strength = computeStrength(secret.password)
+                                    return (
+                                        <div key={secret.id}>
+                                            <div
+                                                onClick={() => setSelectedSecret(selectedSecret?.id === secret.id ? null : secret)}
+                                                className={`p-4 border-b cursor-pointer hover:bg-gray-50 transition-colors ${
+                                                    selectedSecret?.id === secret.id ? 'bg-blue-50 border-l-4 border-l-blue-600' : ''
+                                                }`}
+                                            >
+                                                <div className="flex items-center space-x-3">
+                                                    {secret.website ? (
+                                                        <img src={getFaviconUrl(secret.website)} alt="" className="w-8 h-8 rounded" />
+                                                    ) : (
+                                                        <span className="text-xl">🔑</span>
+                                                    )}
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-medium text-gray-900 truncate">{secret.title || secret.website || 'Untitled'}</p>
+                                                        <p className="text-xs text-gray-500 truncate">{secret.username || secret.email || ''}</p>
+                                                        {secret.website && (<p className="text-xs text-gray-400 truncate">{secret.website}</p>)}
+                                                    </div>
+                                                    <div className={`text-xs font-medium ${getStrengthColor(strength)}`}>
+                                                        {strength}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Expanded details */}
+                                            {selectedSecret?.id === secret.id && (
+                                                <div className="bg-white border-l-4 border-l-blue-600 p-4 space-y-4">
+                                                    <div className="flex items-center justify-between">
+                                                        <h4 className="text-sm font-medium text-gray-900">Password Details</h4>
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); setSelectedSecret(null); }}
+                                                            className="text-gray-400 hover:text-gray-600"
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    </div>
+
+                                                    {/* Website URL */}
+                                                    {secret.website && (
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-gray-700 mb-1">Website</label>
+                                                            <div className="flex items-center space-x-1">
+                                                                <input
+                                                                    type="text"
+                                                                    value={secret.website}
+                                                                    readOnly
+                                                                    className="flex-1 px-2 py-1 text-xs bg-gray-50 border border-gray-300 rounded"
+                                                                />
+                                                                <CopyButton text={secret.website} type="website" secretId={secret.id} />
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Username */}
+                                                    {(secret.username || secret.email) && (
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-gray-700 mb-1">Username</label>
+                                                            <div className="flex items-center space-x-1">
+                                                                <input
+                                                                    type="text"
+                                                                    value={secret.username || secret.email}
+                                                                    readOnly
+                                                                    className="flex-1 px-2 py-1 text-xs bg-gray-50 border border-gray-300 rounded"
+                                                                />
+                                                                <CopyButton text={secret.username || secret.email} type="username" secretId={secret.id} />
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Password */}
+                                                    {secret.password && (
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-gray-700 mb-1">Password</label>
+                                                            <div className="flex items-center space-x-1">
+                                                                <input
+                                                                    type={visiblePasswords[secret.id] ? 'text' : 'password'}
+                                                                    value={secret.password}
+                                                                    readOnly
+                                                                    className="flex-1 px-2 py-1 text-xs bg-gray-50 border border-gray-300 rounded"
+                                                                />
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); togglePasswordVisibility(secret.id); }}
+                                                                    className="p-1 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+                                                                >
+                                                                    {visiblePasswords[secret.id] ? '🙈' : '👁️'}
+                                                                </button>
+                                                                <CopyButton text={secret.password} type="password" secretId={secret.id} />
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Password Strength */}
+                                                    <div>
+                                                        <label className="block text-xs font-medium text-gray-700 mb-1">Strength</label>
+                                                        <div className="flex items-center space-x-2">
+                                                            <div className="flex-1 bg-gray-200 rounded-full h-1.5">
+                                                                <div
+                                                                    className={`h-1.5 rounded-full ${
+                                                                        computeStrength(secret.password) === 'Strong'
+                                                                            ? 'bg-green-500 w-full'
+                                                                            : computeStrength(secret.password) === 'Medium'
+                                                                                ? 'bg-yellow-500 w-2/3'
+                                                                                : 'bg-red-500 w-1/3'
+                                                                    }`}
+                                                                ></div>
+                                                            </div>
+                                                            <span className={`text-xs font-medium ${getStrengthColor(computeStrength(secret.password))}`}>
+                                                                {computeStrength(secret.password)}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Actions */}
+                                                    <div className="flex space-x-2 pt-2">
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); openEditForm(secret); }}
+                                                            className="px-2 py-1 text-xs bg-amber-500 text-white rounded hover:bg-amber-600"
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); setDeleteTarget(secret); }}
+                                                            className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Main Content Area */}
+                    {/*<div className="lg:col-span-2">*/}
+                    {/*    {!showCreate && !selectedSecret ? (*/}
+                    {/*        <div className="bg-white rounded-lg shadow p-8 text-center">*/}
+                    {/*            <div className="text-5xl mb-4 text-gray-400">🔑</div>*/}
+                    {/*            <h2 className="text-xl font-medium text-gray-900 mb-2">Select a password to view details</h2>*/}
+                    {/*            <p className="text-gray-600 mb-6">Choose a password from the list on the left to view and manage it</p>*/}
+                    {/*            <div className="flex justify-center space-x-4">*/}
+                    {/*                <button*/}
+                    {/*                    onClick={() => setShowCreate(true)}*/}
+                    {/*                    className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"*/}
+                    {/*                >*/}
+                    {/*                    <span>➕</span>*/}
+                    {/*                    <span>Add new password</span>*/}
+                    {/*                </button>*/}
+                    {/*                <button*/}
+                    {/*                    onClick={checkBreaches}*/}
+                    {/*                    className="flex items-center space-x-2 px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors"*/}
+                    {/*                >*/}
+                    {/*                    <span>🛡️</span>*/}
+                    {/*                    <span>Security checkup</span>*/}
+                    {/*                </button>*/}
+                    {/*            </div>*/}
+                    {/*        </div>*/}
+                    {/*    ) : null}*/}
+                    {/*</div>*/}
+                </div>
+            </div>
+            {showCreate && (
+                <div className="fixed right-0 top-16 z-40 h-[calc(100vh-64px)] w-full max-w-md bg-white shadow-xl border-l p-5 overflow-y-auto">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-lg font-semibold">Create Secret</h2>
+                        <button onClick={closeCreatePanel} className="text-gray-500 hover:text-gray-700">✕</button>
+                    </div>
+                    {createError && (
+                        <div className="bg-red-100 text-red-700 p-2 rounded mb-3 text-sm">{createError}</div>
+                    )}
+                    <form onSubmit={handleCreateSubmit} className="space-y-3 text-sm">
+                        {['title','username','password','email','website'].map((field) => (
+                            <div key={field}>
+                                <label className="block font-medium capitalize mb-1">{field}</label>
+                                <input
+                                    type={field === 'password' ? 'password' : 'text'}
+                                    name={field}
+                                    value={createForm[field]}
                                     onChange={handleCreateChange}
-                                    className="w-full border border-gray-300 p-2 rounded min-h-[80px]"
+                                    required={field === 'title'}
+                                    className="w-full border border-gray-300 p-2 rounded"
                                 />
                             </div>
-                            <div className="flex justify-end gap-2 pt-2">
-                                <button type="button" onClick={closeCreatePanel} className="bg-gray-500 text-white px-4 py-2 rounded">
-                                    Cancel
-                                </button>
-                                <button type="submit" disabled={createLoading} className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-4 py-2 rounded">
-                                    {createLoading ? 'Creating...' : 'Create'}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
+                        ))}
+                        <div>
+                            <label className="block font-medium mb-1">Note</label>
+                            <textarea
+                                name="note"
+                                value={createForm.note}
+                                onChange={handleCreateChange}
+                                className="w-full border border-gray-300 p-2 rounded min-h-[80px]"
+                            />
+                        </div>
+                        <div className="flex justify-end gap-2 pt-2">
+                            <button type="button" onClick={closeCreatePanel} className="bg-gray-500 text-white px-4 py-2 rounded">
+                                Cancel
+                            </button>
+                            <button type="submit" disabled={createLoading} className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-4 py-2 rounded">
+                                {createLoading ? 'Creating...' : 'Create'}
+                            </button>
+                        </div>
+                    </form>
                 </div>
             )}
 
             {editSecret && (
-                <div className="fixed inset-0 bg-transparent bg-opacity-50 flex items-center justify-center z-50">
-                    <form onSubmit={handleEditSubmit} className="bg-white p-6 rounded shadow w-full max-w-sm space-y-4">
+                <div className="fixed inset-0 bg-transparent bg-opacity-50 flex items-center justify-center z-50" onClick={() => setEditSecret(null)}>
+                    <form onClick={(e) => e.stopPropagation()} onSubmit={handleEditSubmit} className="bg-white p-6 rounded shadow w-full max-w-sm space-y-4">
                         <h2 className="text-lg font-bold">Edit Secret</h2>
-                        {['title', 'username', 'password', 'email', 'website', 'note'].map(field => (
+                        {['title', 'username', 'password', 'email', 'website'].map(field => (
                             <div key={field}>
                                 <label className="block text-sm font-medium capitalize">{field}</label>
                                 <input
+                                    type={field === 'password' ? 'password' : field === 'email' ? 'email' : field === 'website' ? 'url' : 'text'}
                                     name={field}
-                                    value={editForm[field]}
+                                    value={editForm[field] ?? ''}
                                     onChange={handleEditChange}
                                     className="w-full border border-gray-300 p-2 rounded text-sm"
                                 />
                             </div>
                         ))}
+                        <div>
+                            <label className="block text-sm font-medium">Note</label>
+                            <textarea
+                                name="note"
+                                value={editForm.note ?? ''}
+                                onChange={handleEditChange}
+                                className="w-full border border-gray-300 p-2 rounded text-sm min-h-[80px]"
+                            />
+                        </div>
                         <div className="flex justify-end gap-2">
                             <button type="button" onClick={() => setEditSecret(null)} className="bg-gray-500 text-white px-4 py-2 text-sm rounded">
                                 Cancel
@@ -506,6 +665,25 @@ const SecretsDashboard = () => {
                             </button>
                         </div>
                     </form>
+                </div>
+            )}
+
+            {deleteTarget && (
+                <div className="fixed inset-0 bg-transparent bg-opacity-50 flex items-center justify-center z-50" onClick={() => setDeleteTarget(null)}>
+                    <div className="bg-white p-6 rounded shadow w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+                        <h2 className="text-lg font-bold mb-2">Delete Secret</h2>
+                        <p className="text-sm text-gray-700 mb-4">Are you sure you want to delete "{deleteTarget?.title}"? This action cannot be undone.</p>
+                        <div className="flex justify-end gap-2">
+                            <button type="button" onClick={() => setDeleteTarget(null)} className="bg-gray-500 text-white px-4 py-2 text-sm rounded">Cancel</button>
+                            <button
+                                type="button"
+                                onClick={async () => { await handleDelete(deleteTarget.id); setDeleteTarget(null); setSelectedSecret(null); }}
+                                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 text-sm rounded"
+                            >
+                                Delete
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

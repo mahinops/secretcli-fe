@@ -4,8 +4,9 @@ import LogoutButton from '../components/LogoutButton';
 
 const Layout = () => {
     return (
-        <div className="min-h-screen flex">
-            <aside className="w-60 bg-gradient-to-b rounded-r-2xl from-gray-800 to-gray-900 text-white p-4 space-y-6 flex flex-col shadow-xl">
+        <div className="min-h-screen">
+            {/* Fixed Sidebar */}
+            <aside className="fixed inset-y-0 left-0 w-60 bg-gradient-to-b rounded-r-2xl from-gray-800 to-gray-900 text-white p-4 space-y-6 flex flex-col shadow-xl z-40">
                 <h1 className="text-xl font-bold text-center py-2">🔐 Password Manager</h1>
 
                 <nav className="space-y-3 flex-grow">
@@ -35,7 +36,8 @@ const Layout = () => {
                 </nav>
                 <LogoutButton />
             </aside>
-            <main className="flex-1 p-6 bg-gray-100">
+            {/* Scrollable Main area with left offset matching aside */}
+            <main className="ml-60 p-6 bg-gray-100 h-screen overflow-y-auto">
                 <Outlet />
             </main>
         </div>
