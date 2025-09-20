@@ -1,49 +1,134 @@
-import React, { useEffect, useState, useRef } from 'react'
-import api from '../api'
-import { useNavigate } from "react-router-dom"
-import { clearAuthData } from "../utils/tokenUtils.jsx"
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import api from '../api';
+import { useNavigate } from 'react-router-dom';
+import { clearAuthData } from '../utils/tokenUtils.jsx';
 
 // Dev-only guard to avoid double effect run in React 18 StrictMode
-let shouldSkipNextEffectInDev = true
+let shouldSkipNextEffectInDev = true;
+
+const ErrorMessage = React.memo(({ message }) => (
+    message ? (
+        <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded text-sm mb-2" role="alert" aria-live="assertive" id="secrets-error">{message}</div>
+    ) : null
+));
+
+const computeStrength = (pwd) => {
+    if (!pwd) return 'Weak';
+    const length = pwd.length;
+    const hasUpper = /[A-Z]/.test(pwd);
+    const hasLower = /[a-z]/.test(pwd);
+    const hasNum = /\d/.test(pwd);
+    const hasSym = /[^A-Za-z0-9]/.test(pwd);
+    const score = [hasUpper, hasLower, hasNum, hasSym].filter(Boolean).length + (length > 12 ? 1 : length > 8 ? 0.5 : 0);
+    if (score >= 3.5) return 'Strong';
+    if (score >= 2.5) return 'Medium';
+    return 'Weak';
+};
+const getStrengthColor = (strength) => {
+    switch (strength) {
+        case 'Strong': return 'text-green-600';
+        case 'Medium': return 'text-yellow-600';
+        default: return 'text-red-600';
+    }
+};
+
+const CopyButton = React.memo(({ text, type, secretId, isCopied, onCopy }) => (
+    <button
+        type="button"
+        onClick={() => onCopy(text, type, secretId)}
+        className="ml-2 p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+        title={`Copy ${type}`}
+        aria-label={`Copy ${type}`}
+    >
+        {isCopied ? (
+            <span aria-label="Copied" role="img">✅</span>
+        ) : (
+            <span aria-label="Copy" role="img">📋</span>
+        )}
+    </button>
+));
 
 const SecretsDashboard = () => {
-    const [secrets, setSecrets] = useState([])
-    const [error, setError] = useState('')
-    const [isLoading, setIsLoading] = useState(true)
-    const [editSecret, setEditSecret] = useState(null)
-    const [editForm, setEditForm] = useState({ title: '', username: '', password: '', email: '', website: '', note: '' })
+    const [secrets, setSecrets] = useState([]);
+    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(true);
+    const [editSecret, setEditSecret] = useState(null);
+    const [editForm, setEditForm] = useState({ title: '', username: '', password: '', email: '', website: '', note: '', url: '' });
 
     // Create panel state
-    const [showCreate, setShowCreate] = useState(false)
-    const [createForm, setCreateForm] = useState({ title: '', username: '', password: '', email: '', website: '', note: '' })
-    const [createLoading, setCreateLoading] = useState(false)
-    const [createError, setCreateError] = useState('')
+    const [showCreate, setShowCreate] = useState(false);
+    const [createForm, setCreateForm] = useState({ title: '', username: '', password: '', email: '', website: '', note: '', url: '' });
+    const [createLoading, setCreateLoading] = useState(false);
+    const [createError, setCreateError] = useState('');
 
     // New states for password visibility and copy functionality
-    const [visiblePasswords, setVisiblePasswords] = useState({})
-    const [copiedItems, setCopiedItems] = useState({})
+    const [visiblePasswords, setVisiblePasswords] = useState({});
+    const [copiedItems, setCopiedItems] = useState({});
 
-    const [searchTerm, setSearchTerm] = useState('')
-    const [selectedSecret, setSelectedSecret] = useState(null)
-    const [deleteTarget, setDeleteTarget] = useState(null)
-    const navigate = useNavigate()
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedSecret, setSelectedSecret] = useState(null);
+    const [deleteTarget, setDeleteTarget] = useState(null);
+    const navigate = useNavigate();
 
     // Throttling and retry guards to avoid rate limiting
-    const inFlightRef = useRef(false)
-    const lastFetchAtRef = useRef(0)
-    const retryCountRef = useRef(0)
-    const retryTimeoutRef = useRef(null)
+    const inFlightRef = useRef(false);
+    const lastFetchAtRef = useRef(0);
+    const retryCountRef = useRef(0);
+    const retryTimeoutRef = useRef(null);
+
+    // Debounced search
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    useEffect(() => {
+        const handler = setTimeout(() => setDebouncedSearch(searchTerm), 300);
+        return () => clearTimeout(handler);
+    }, [searchTerm]);
+
+    // Modularized fetch secrets with proper type checking
+    const fetchSecrets = async () => {
+        setIsLoading(true);
+        setError('');
+        try {
+            const res = await api.get('/secret/api/list');
+            // Ensure we always set an array
+            const secretsData = res?.data?.data?.secrets || res?.data?.data || [];
+            setSecrets(Array.isArray(secretsData) ? secretsData : []);
+        } catch (err) {
+            if (err?.response?.status === 401) {
+                clearAuthData();
+                navigate('/');
+            } else {
+                setError(err?.response?.data?.message || 'Failed to fetch secrets');
+            }
+            // On error, ensure secrets is at least an empty array
+            setSecrets([]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // Memoized filtered secrets with proper type checking
+    const filteredSecrets = useMemo(() => {
+        // Ensure secrets is always an array
+        const secretsArray = Array.isArray(secrets) ? secrets : [];
+        if (!debouncedSearch) return secretsArray;
+        return secretsArray.filter(secret =>
+            (secret?.title || '').toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+            (secret?.username || '').toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+            (secret?.email || '').toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+            (secret?.website || '').toLowerCase().includes(debouncedSearch.toLowerCase())
+        );
+    }, [secrets, debouncedSearch]);
 
     // Password visibility toggle
-    const togglePasswordVisibility = (secretId) => {
+    const togglePasswordVisibility = useCallback((secretId) => {
         setVisiblePasswords(prev => ({
             ...prev,
             [secretId]: !prev[secretId]
         }));
-    };
+    }, []);
 
     // Copy to clipboard functionality
-    const copyToClipboard = async (text, type, secretId) => {
+    const copyToClipboard = useCallback(async (text, type, secretId) => {
         try {
             await navigator.clipboard.writeText(text);
             const key = `${secretId}-${type}`;
@@ -54,80 +139,11 @@ const SecretsDashboard = () => {
         } catch (err) {
             console.error('Failed to copy: ', err);
         }
-    };
+    }, []);
 
-    // Copy button component
-    const CopyButton = ({ text, type, secretId }) => {
-        const key = `${secretId}-${type}`;
-        const isCopied = copiedItems[key];
-
-        return (
-            <button
-                onClick={() => copyToClipboard(text, type, secretId)}
-                className="ml-2 p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
-                title={`Copy ${type}`}
-            >
-                {isCopied ? (
-                    <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                ) : (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                )}
-            </button>
-        );
-    };
-
-    // Helpers derived from the Password Manager design
-    const computeStrength = (pwd) => {
-        if (!pwd) return 'Weak'
-        const length = pwd.length
-        const hasUpper = /[A-Z]/.test(pwd)
-        const hasLower = /[a-z]/.test(pwd)
-        const hasNum = /\d/.test(pwd)
-        const hasSym = /[^A-Za-z0-9]/.test(pwd)
-        const score = [hasUpper, hasLower, hasNum, hasSym].filter(Boolean).length + (length > 12 ? 1 : length > 8 ? 0.5 : 0)
-        if (score >= 3.5) return 'Strong'
-        if (score >= 2.5) return 'Medium'
-        return 'Weak'
-    }
-
-    const getStrengthColor = (strength) => {
-        switch (strength) {
-            case 'Strong': return 'text-green-600'
-            case 'Medium': return 'text-yellow-600'
-            case 'Weak': return 'text-red-600'
-            default: return 'text-gray-600'
-        }
-    }
-
-    const getFaviconUrl = (website) => {
-        if (!website) return ''
-        try {
-            const url = new URL(website)
-            return `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=32`
-        } catch {
-            return `https://www.google.com/s2/favicons?domain=${website}&sz=32`
-        }
-    }
-
-    const checkBreaches = () => {
-        alert('Checking for compromised passwords... All passwords are secure!')
-    }
-
-    const filteredSecrets = secrets.filter(s => {
-        const q = searchTerm.toLowerCase()
-        return (
-            (s.title || '').toLowerCase().includes(q) ||
-            (s.username || '').toLowerCase().includes(q) ||
-            (s.email || '').toLowerCase().includes(q) ||
-            (s.website || '').toLowerCase().includes(q)
-        )
-    })
 
     useEffect(() => {
+        fetchSecrets();
         // In React 18 StrictMode (dev), effects run twice. Skip the first run to avoid duplicate loads.
         if (import.meta?.env?.MODE !== 'production' && shouldSkipNextEffectInDev) {
             shouldSkipNextEffectInDev = false
@@ -148,60 +164,6 @@ const SecretsDashboard = () => {
             }, delayMs)
         }
 
-        const fetchSecrets = async () => {
-            const now = Date.now()
-            if (inFlightRefLocal.current) return
-            if (now - lastFetchAtRefLocal.current < MIN_FETCH_INTERVAL_MS) return
-
-            inFlightRefLocal.current = true
-            lastFetchAtRefLocal.current = now
-            setIsLoading(true)
-            let willRetry = false
-            try {
-                const res = await api.get('/secret/api/list')
-                if (!cancelled) {
-                    setSecrets(res.data.data.secrets)
-                    setError('')
-                    retryCountRefLocal.current = 0
-                }
-            } catch (err) {
-                if (cancelled) return
-                if (err === 'Token expired') {
-                    clearAuthData()
-                    navigate('/')
-                    return
-                }
-                const status = err.response?.status
-                if (status === 429) {
-                    // Use Retry-After if provided or exponential backoff
-                    const retryAfter = err.response?.headers?.['retry-after']
-                    let delay = 1500 * Math.pow(2, retryCountRefLocal.current)
-                    const parsed = Number(retryAfter)
-                    if (!Number.isNaN(parsed) && parsed > 0) {
-                        delay = Math.max(delay, parsed * 1000)
-                    }
-                    if (retryCountRefLocal.current < 3) {
-                        retryCountRefLocal.current += 1
-                        setError('Too many requests. Retrying...')
-                        willRetry = true
-                        scheduleRetry(delay)
-                        return
-                    } else {
-                        setError('Too many requests. Please try again later.')
-                        return
-                    }
-                }
-                const msg = err.response?.data?.message || err.message
-                setError(msg)
-                if (status === 401) {
-                    clearAuthData()
-                    navigate('/')
-                }
-            } finally {
-                if (!cancelled && !willRetry) setIsLoading(false)
-                inFlightRefLocal.current = false
-            }
-        }
 
         fetchSecrets()
         return () => {
@@ -243,22 +205,37 @@ const SecretsDashboard = () => {
     }
 
     const handleEditChange = (e) => {
-        setEditForm({ ...editForm, [e.target.name]: e.target.value })
+        const { name, value } = e.target
+        setEditForm(prev => ({
+            ...prev,
+            [name]: value,
+            // Auto-populate url when website is changed
+            ...(name === 'website' && { url: value })
+        }))
     }
 
     const handleEditSubmit = async (e) => {
         e.preventDefault()
         try {
             const { id, ...updatedData } = editForm
-            const res = await api.put(`/secret/api/update/${id}`, updatedData)
+            // Ensure url is included in the update
+            const dataToSend = {
+                ...updatedData,
+                url: updatedData.url || updatedData.website
+            }
+            const res = await api.put(`/secret/api/update/${id}`, dataToSend)
             const apiUpdated = res?.data?.data?.secret || res?.data?.secret || null
+            const updatedSecret = apiUpdated ? { ...editSecret, ...apiUpdated } : { ...editSecret, ...updatedData, id }
             setSecrets(prev => prev.map(secret => {
                 if (secret.id === id) {
-                    // Prefer server response if provided; otherwise merge local form data
-                    return apiUpdated ? { ...secret, ...apiUpdated } : { ...secret, ...updatedData, id }
+                    return updatedSecret
                 }
                 return secret
             }))
+            // Update selectedSecret if it's the one being edited
+            if (selectedSecret?.id === id) {
+                setSelectedSecret(updatedSecret)
+            }
             setEditSecret(null)
             setError('') // clear any previous error
         } catch (err) {
@@ -269,11 +246,17 @@ const SecretsDashboard = () => {
 
     // Create form handlers
     const handleCreateChange = (e) => {
-        setCreateForm({ ...createForm, [e.target.name]: e.target.value })
+        const { name, value } = e.target
+        setCreateForm(prev => ({
+            ...prev,
+            [name]: value,
+            // Auto-populate url when website is changed
+            ...(name === 'website' && { url: value })
+        }))
     }
 
     const resetCreateForm = () => {
-        setCreateForm({ title: '', username: '', password: '', email: '', website: '', note: '' })
+        setCreateForm({ title: '', username: '', password: '', email: '', website: '', note: '', url: '' })
         setCreateError('')
         setCreateLoading(false)
     }
@@ -337,6 +320,7 @@ const SecretsDashboard = () => {
                 note: createForm.note,
                 email: createForm.email,
                 website: createForm.website,
+                url: createForm.url || createForm.website,
             })
             await refreshSecretsAfterCreate()
             closeCreatePanel()
@@ -363,230 +347,168 @@ const SecretsDashboard = () => {
 
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            {/* Header (sticky) */}
-            <div className="sticky top-0 z-30 bg-white shadow-sm border-b">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex items-center justify-between h-16">
-                        <div className="flex items-center space-x-3">
-                            <span className="text-2xl">🔐</span>
-                            <h1 className="text-xl font-medium text-gray-900">Password Manager</h1>
-                        </div>
-                        <div className="flex items-center space-x-4">
-                            <button
-                                onClick={checkBreaches}
-                                className="flex items-center space-x-2 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
-                            >
-                                <span>🛡️</span>
-                                <span>Check passwords</span>
-                            </button>
-                            <button className="p-2 text-gray-600 hover:text-gray-900" title="Settings">
-                                ⚙️
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-0 h-[calc(100vh-64px)] ${showCreate ? 'lg:mr-[420px]' : ''}`}>
-                <div className="flex gap-8 items-start">
-                    {/* Left Sidebar - Password List */}
-                    <div className="flex-1">
-                        <div className="bg-white rounded-lg shadow flex flex-col h-full overflow-hidden">
-                            {/* Search Bar */}
-                            <div className="p-4 border-b">
-                                <div className="relative">
-                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔎</span>
-                                    <input
-                                        type="text"
-                                        placeholder="Search passwords"
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Add Password Button */}
-                            <div className="p-4 border-b">
+        <div className="min-h-screen bg-gray-50" aria-labelledby="secrets-dashboard-title">
+            <h1 id="secrets-dashboard-title" className="text-2xl font-bold mb-4">Secrets Dashboard</h1>
+            <ErrorMessage message={error} />
+            <nav aria-label="Password list navigation">
+                <ul className="space-y-2">
+                    {filteredSecrets.map((secret) => {
+                        const strength = computeStrength(secret.password);
+                        const key = `${secret.id}-password`;
+                        return (
+                            <li key={secret.id} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
                                 <button
-                                    onClick={() => { setShowCreate(true); setCreateError(''); setSelectedSecret(null); }}
-                                    className="w-full flex items-center justify-center space-x-2 px-4 py-2 rounded-md transition-colors bg-blue-600 text-white hover:bg-blue-700"
+                                    type="button"
+                                    onClick={() => setSelectedSecret(selectedSecret?.id === secret.id ? null : secret)}
+                                    className={`w-full p-4 text-left cursor-pointer hover:bg-gray-50 transition-all duration-200 ${
+                                        selectedSecret?.id === secret.id
+                                            ? 'bg-blue-50 border-l-4 border-l-blue-500'
+                                            : 'hover:border-gray-300'
+                                    }`}
+                                    aria-label={`View details for ${secret.title || secret.website || 'Untitled'}`}
                                 >
-                                    <span>➕</span>
-                                    <span>Add password</span>
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center space-x-3">
+                                            <span className="text-xl" aria-label="Password icon" role="img">🔑</span>
+                                            <div>
+                                                <div className="text-sm font-semibold text-gray-900 truncate">
+                                                    {secret.title || secret.website || 'Untitled'}
+                                                </div>
+                                                {secret.username || secret.email ? (
+                                                    <div className="text-xs text-gray-500 truncate mt-0.5">
+                                                        {secret.username || secret.email}
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                                    strength === 'Strong' ? 'bg-green-100 text-green-700' :
+                                        strength === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                                            'bg-red-100 text-red-700'
+                                }`}>
+                                    {strength}
+                                </span>
+                                            <span className={`text-gray-400 transition-transform duration-200 ${
+                                                selectedSecret?.id === secret.id ? 'rotate-180' : ''
+                                            }`}>
+                                    ▼
+                                </span>
+                                        </div>
+                                    </div>
                                 </button>
-                            </div>
 
-                            {/* Password List */}
-                            <div className="flex-1 overflow-y-auto">
-                                {filteredSecrets.map((secret) => {
-                                    const strength = computeStrength(secret.password)
-                                    return (
-                                        <div key={secret.id}>
-                                            <div
-                                                onClick={() => setSelectedSecret(selectedSecret?.id === secret.id ? null : secret)}
-                                                className={`p-4 border-b cursor-pointer hover:bg-gray-50 transition-colors ${
-                                                    selectedSecret?.id === secret.id ? 'bg-blue-50 border-l-4 border-l-blue-600' : ''
-                                                }`}
+                                {/* Expanded details */}
+                                {selectedSecret?.id === secret.id && (
+                                    <div className="border-t border-gray-100 bg-gray-50 p-4 space-y-4">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <h4 className="text-sm font-semibold text-gray-900">Password Details</h4>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setSelectedSecret(null); }}
+                                                className="text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-full p-1 transition-colors"
                                             >
-                                                <div className="flex items-center space-x-3">
-                                                    {secret.website ? (
-                                                        <img src={getFaviconUrl(secret.website)} alt="" className="w-8 h-8 rounded" />
-                                                    ) : (
-                                                        <span className="text-xl">🔑</span>
-                                                    )}
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-medium text-gray-900 truncate">{secret.title || secret.website || 'Untitled'}</p>
-                                                        <p className="text-xs text-gray-500 truncate">{secret.username || secret.email || ''}</p>
-                                                        {secret.website && (<p className="text-xs text-gray-400 truncate">{secret.website}</p>)}
-                                                    </div>
-                                                    <div className={`text-xs font-medium ${getStrengthColor(strength)}`}>
-                                                        {strength}
-                                                    </div>
+                                                ✕
+                                            </button>
+                                        </div>
+
+                                        {/* Website URL */}
+                                        {secret.website && (
+                                            <div className="space-y-1">
+                                                <label className="block text-xs font-medium text-gray-700">Website</label>
+                                                <div className="flex items-center space-x-2">
+                                                    <input
+                                                        type="text"
+                                                        value={secret.website}
+                                                        readOnly
+                                                        className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-md focus:outline-none"
+                                                    />
+                                                    <CopyButton text={secret.website} type="website" secretId={secret.id} />
                                                 </div>
                                             </div>
+                                        )}
 
-                                            {/* Expanded details */}
-                                            {selectedSecret?.id === secret.id && (
-                                                <div className="bg-white border-l-4 border-l-blue-600 p-4 space-y-4">
-                                                    <div className="flex items-center justify-between">
-                                                        <h4 className="text-sm font-medium text-gray-900">Password Details</h4>
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); setSelectedSecret(null); }}
-                                                            className="text-gray-400 hover:text-gray-600"
-                                                        >
-                                                            ✕
-                                                        </button>
-                                                    </div>
-
-                                                    {/* Website URL */}
-                                                    {secret.website && (
-                                                        <div>
-                                                            <label className="block text-xs font-medium text-gray-700 mb-1">Website</label>
-                                                            <div className="flex items-center space-x-1">
-                                                                <input
-                                                                    type="text"
-                                                                    value={secret.website}
-                                                                    readOnly
-                                                                    className="flex-1 px-2 py-1 text-xs bg-gray-50 border border-gray-300 rounded"
-                                                                />
-                                                                <CopyButton text={secret.website} type="website" secretId={secret.id} />
-                                                            </div>
-                                                        </div>
-                                                    )}
-
-                                                    {/* Username */}
-                                                    {(secret.username || secret.email) && (
-                                                        <div>
-                                                            <label className="block text-xs font-medium text-gray-700 mb-1">Username</label>
-                                                            <div className="flex items-center space-x-1">
-                                                                <input
-                                                                    type="text"
-                                                                    value={secret.username || secret.email}
-                                                                    readOnly
-                                                                    className="flex-1 px-2 py-1 text-xs bg-gray-50 border border-gray-300 rounded"
-                                                                />
-                                                                <CopyButton text={secret.username || secret.email} type="username" secretId={secret.id} />
-                                                            </div>
-                                                        </div>
-                                                    )}
-
-                                                    {/* Password */}
-                                                    {secret.password && (
-                                                        <div>
-                                                            <label className="block text-xs font-medium text-gray-700 mb-1">Password</label>
-                                                            <div className="flex items-center space-x-1">
-                                                                <input
-                                                                    type={visiblePasswords[secret.id] ? 'text' : 'password'}
-                                                                    value={secret.password}
-                                                                    readOnly
-                                                                    className="flex-1 px-2 py-1 text-xs bg-gray-50 border border-gray-300 rounded"
-                                                                />
-                                                                <button
-                                                                    onClick={(e) => { e.stopPropagation(); togglePasswordVisibility(secret.id); }}
-                                                                    className="p-1 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
-                                                                >
-                                                                    {visiblePasswords[secret.id] ? '🙈' : '👁️'}
-                                                                </button>
-                                                                <CopyButton text={secret.password} type="password" secretId={secret.id} />
-                                                            </div>
-                                                        </div>
-                                                    )}
-
-                                                    {/* Password Strength */}
-                                                    <div>
-                                                        <label className="block text-xs font-medium text-gray-700 mb-1">Strength</label>
-                                                        <div className="flex items-center space-x-2">
-                                                            <div className="flex-1 bg-gray-200 rounded-full h-1.5">
-                                                                <div
-                                                                    className={`h-1.5 rounded-full ${
-                                                                        computeStrength(secret.password) === 'Strong'
-                                                                            ? 'bg-green-500 w-full'
-                                                                            : computeStrength(secret.password) === 'Medium'
-                                                                                ? 'bg-yellow-500 w-2/3'
-                                                                                : 'bg-red-500 w-1/3'
-                                                                    }`}
-                                                                ></div>
-                                                            </div>
-                                                            <span className={`text-xs font-medium ${getStrengthColor(computeStrength(secret.password))}`}>
-                                                                {computeStrength(secret.password)}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Actions */}
-                                                    <div className="flex space-x-2 pt-2">
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); openEditForm(secret); }}
-                                                            className="px-2 py-1 text-xs bg-amber-500 text-white rounded hover:bg-amber-600"
-                                                        >
-                                                            Edit
-                                                        </button>
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); setDeleteTarget(secret); }}
-                                                            className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
-                                                        >
-                                                            Delete
-                                                        </button>
-                                                    </div>
+                                        {/* Username */}
+                                        {(secret.username || secret.email) && (
+                                            <div className="space-y-1">
+                                                <label className="block text-xs font-medium text-gray-700">Username</label>
+                                                <div className="flex items-center space-x-2">
+                                                    <input
+                                                        type="text"
+                                                        value={secret.username || secret.email}
+                                                        readOnly
+                                                        className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-md focus:outline-none"
+                                                    />
+                                                    <CopyButton text={secret.username || secret.email} type="username" secretId={secret.id} />
                                                 </div>
-                                            )}
-                                        </div>
-                                    )
-                                })}
-                            </div>
-                        </div>
-                    </div>
+                                            </div>
+                                        )}
 
-                    {/* Main Content Area */}
-                    {/*<div className="lg:col-span-2">*/}
-                    {/*    {!showCreate && !selectedSecret ? (*/}
-                    {/*        <div className="bg-white rounded-lg shadow p-8 text-center">*/}
-                    {/*            <div className="text-5xl mb-4 text-gray-400">🔑</div>*/}
-                    {/*            <h2 className="text-xl font-medium text-gray-900 mb-2">Select a password to view details</h2>*/}
-                    {/*            <p className="text-gray-600 mb-6">Choose a password from the list on the left to view and manage it</p>*/}
-                    {/*            <div className="flex justify-center space-x-4">*/}
-                    {/*                <button*/}
-                    {/*                    onClick={() => setShowCreate(true)}*/}
-                    {/*                    className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"*/}
-                    {/*                >*/}
-                    {/*                    <span>➕</span>*/}
-                    {/*                    <span>Add new password</span>*/}
-                    {/*                </button>*/}
-                    {/*                <button*/}
-                    {/*                    onClick={checkBreaches}*/}
-                    {/*                    className="flex items-center space-x-2 px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors"*/}
-                    {/*                >*/}
-                    {/*                    <span>🛡️</span>*/}
-                    {/*                    <span>Security checkup</span>*/}
-                    {/*                </button>*/}
-                    {/*            </div>*/}
-                    {/*        </div>*/}
-                    {/*    ) : null}*/}
-                    {/*</div>*/}
-                </div>
-            </div>
+                                        {/* Password */}
+                                        {secret.password && (
+                                            <div className="space-y-1">
+                                                <label className="block text-xs font-medium text-gray-700">Password</label>
+                                                <div className="flex items-center space-x-2">
+                                                    <input
+                                                        type={visiblePasswords[secret.id] ? 'text' : 'password'}
+                                                        value={secret.password}
+                                                        readOnly
+                                                        className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-md focus:outline-none"
+                                                    />
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); togglePasswordVisibility(secret.id); }}
+                                                        className="p-2 text-gray-600 hover:text-gray-900 hover:bg-white border border-gray-200 rounded-md transition-colors"
+                                                    >
+                                                        {visiblePasswords[secret.id] ? '🙈' : '👁️'}
+                                                    </button>
+                                                    <CopyButton text={secret.password} type="password" secretId={secret.id} />
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Password Strength */}
+                                        <div className="space-y-2">
+                                            <label className="block text-xs font-medium text-gray-700">Password Strength</label>
+                                            <div className="flex items-center space-x-3">
+                                                <div className="flex-1 bg-gray-200 rounded-full h-2">
+                                                    <div
+                                                        className={`h-2 rounded-full transition-all duration-300 ${
+                                                            computeStrength(secret.password) === 'Strong'
+                                                                ? 'bg-green-500 w-full'
+                                                                : computeStrength(secret.password) === 'Medium'
+                                                                    ? 'bg-yellow-500 w-2/3'
+                                                                    : 'bg-red-500 w-1/3'
+                                                        }`}
+                                                    ></div>
+                                                </div>
+                                                <span className={`text-sm font-medium ${getStrengthColor(computeStrength(secret.password))}`}>
+                                        {computeStrength(secret.password)}
+                                    </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Actions */}
+                                        <div className="flex space-x-3 pt-3 border-t border-gray-200">
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); openEditForm(secret); }}
+                                                className="flex-1 px-4 py-2 text-sm font-medium bg-amber-500 text-white rounded-md hover:bg-amber-600 transition-colors"
+                                            >
+                                                Edit
+                                            </button>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setDeleteTarget(secret); }}
+                                                className="flex-1 px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                                            >
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </li>
+                        );
+                    })}
+                </ul>
+            </nav>
+            {/* Create secret panel */}
             {showCreate && (
                 <div className="fixed right-0 top-16 z-40 h-[calc(100vh-64px)] w-full max-w-md bg-white shadow-xl border-l p-5 overflow-y-auto">
                     <div className="flex items-center justify-between mb-4">
