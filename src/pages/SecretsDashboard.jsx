@@ -348,165 +348,202 @@ const SecretsDashboard = () => {
 
     return (
         <div className="min-h-screen bg-gray-50" aria-labelledby="secrets-dashboard-title">
-            <h1 id="secrets-dashboard-title" className="text-2xl font-bold mb-4">Secrets Dashboard</h1>
+            <div className="flex items-center justify-between mb-4">
+                <h1 id="secrets-dashboard-title" className="text-2xl font-bold">Secrets Dashboard</h1>
+                <button
+                    type="button"
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    onClick={() => setShowCreate(true)}
+                    aria-label="Add Secret"
+                    title="Add a new secret"
+                >
+                    + Add Secret
+                </button>
+            </div>
+            <div className="mb-6">
+                <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    placeholder="Search by title, username, email, or website..."
+                    className="w-full max-w-md border border-gray-300 p-2 rounded focus:ring-2 focus:ring-blue-400"
+                    aria-label="Search secrets"
+                />
+            </div>
             <ErrorMessage message={error} />
             <nav aria-label="Password list navigation">
-                <ul className="space-y-2">
-                    {filteredSecrets.map((secret) => {
-                        const strength = computeStrength(secret.password);
-                        const key = `${secret.id}-password`;
-                        return (
-                            <li key={secret.id} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                                <button
-                                    type="button"
-                                    onClick={() => setSelectedSecret(selectedSecret?.id === secret.id ? null : secret)}
-                                    className={`w-full p-4 text-left cursor-pointer hover:bg-gray-50 transition-all duration-200 ${
-                                        selectedSecret?.id === secret.id
-                                            ? 'bg-blue-50 border-l-4 border-l-blue-500'
-                                            : 'hover:border-gray-300'
-                                    }`}
-                                    aria-label={`View details for ${secret.title || secret.website || 'Untitled'}`}
-                                >
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center space-x-3">
-                                            <span className="text-xl" aria-label="Password icon" role="img">🔑</span>
-                                            <div>
-                                                <div className="text-sm font-semibold text-gray-900 truncate">
-                                                    {secret.title || secret.website || 'Untitled'}
-                                                </div>
-                                                {secret.username || secret.email ? (
-                                                    <div className="text-xs text-gray-500 truncate mt-0.5">
-                                                        {secret.username || secret.email}
-                                                    </div>
-                                                ) : null}
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center space-x-2">
-                                <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                                    strength === 'Strong' ? 'bg-green-100 text-green-700' :
-                                        strength === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                                            'bg-red-100 text-red-700'
-                                }`}>
-                                    {strength}
-                                </span>
-                                            <span className={`text-gray-400 transition-transform duration-200 ${
-                                                selectedSecret?.id === secret.id ? 'rotate-180' : ''
-                                            }`}>
-                                    ▼
-                                </span>
-                                        </div>
-                                    </div>
-                                </button>
-
-                                {/* Expanded details */}
-                                {selectedSecret?.id === secret.id && (
-                                    <div className="border-t border-gray-100 bg-gray-50 p-4 space-y-4">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <h4 className="text-sm font-semibold text-gray-900">Password Details</h4>
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); setSelectedSecret(null); }}
-                                                className="text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-full p-1 transition-colors"
-                                            >
-                                                ✕
-                                            </button>
-                                        </div>
-
-                                        {/* Website URL */}
-                                        {secret.website && (
-                                            <div className="space-y-1">
-                                                <label className="block text-xs font-medium text-gray-700">Website</label>
-                                                <div className="flex items-center space-x-2">
-                                                    <input
-                                                        type="text"
-                                                        value={secret.website}
-                                                        readOnly
-                                                        className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-md focus:outline-none"
-                                                    />
-                                                    <CopyButton text={secret.website} type="website" secretId={secret.id} />
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Username */}
-                                        {(secret.username || secret.email) && (
-                                            <div className="space-y-1">
-                                                <label className="block text-xs font-medium text-gray-700">Username</label>
-                                                <div className="flex items-center space-x-2">
-                                                    <input
-                                                        type="text"
-                                                        value={secret.username || secret.email}
-                                                        readOnly
-                                                        className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-md focus:outline-none"
-                                                    />
-                                                    <CopyButton text={secret.username || secret.email} type="username" secretId={secret.id} />
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Password */}
-                                        {secret.password && (
-                                            <div className="space-y-1">
-                                                <label className="block text-xs font-medium text-gray-700">Password</label>
-                                                <div className="flex items-center space-x-2">
-                                                    <input
-                                                        type={visiblePasswords[secret.id] ? 'text' : 'password'}
-                                                        value={secret.password}
-                                                        readOnly
-                                                        className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-md focus:outline-none"
-                                                    />
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); togglePasswordVisibility(secret.id); }}
-                                                        className="p-2 text-gray-600 hover:text-gray-900 hover:bg-white border border-gray-200 rounded-md transition-colors"
-                                                    >
-                                                        {visiblePasswords[secret.id] ? '🙈' : '👁️'}
-                                                    </button>
-                                                    <CopyButton text={secret.password} type="password" secretId={secret.id} />
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Password Strength */}
-                                        <div className="space-y-2">
-                                            <label className="block text-xs font-medium text-gray-700">Password Strength</label>
+                {isLoading ? (
+                    <div className="text-center text-gray-500 py-8" role="status" aria-live="polite">Loading secrets...</div>
+                ) : filteredSecrets.length === 0 ? (
+                    <div className="text-center py-12">
+                        <div className="text-4xl mb-2" aria-label="No secrets" role="img">🔒</div>
+                        <div className="text-lg text-gray-700 mb-4">No secrets found.</div>
+                        <button
+                            type="button"
+                            className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                            onClick={() => setShowCreate(true)}
+                            aria-label="Add your first secret"
+                        >
+                            Add your first secret
+                        </button>
+                    </div>
+                ) : (
+                    <ul className="space-y-2">
+                        {filteredSecrets.map((secret) => {
+                            const strength = computeStrength(secret.password);
+                            const key = `${secret.id}-password`;
+                            return (
+                                <li key={secret.id} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedSecret(selectedSecret?.id === secret.id ? null : secret)}
+                                        className={`w-full p-4 text-left cursor-pointer hover:bg-gray-50 transition-all duration-200 ${
+                                            selectedSecret?.id === secret.id
+                                                ? 'bg-blue-50 border-l-4 border-l-blue-500'
+                                                : 'hover:border-gray-300'
+                                        }`}
+                                        aria-label={`View details for ${secret.title || secret.website || 'Untitled'}`}
+                                        title="View secret details"
+                                    >
+                                        <div className="flex items-center justify-between">
                                             <div className="flex items-center space-x-3">
-                                                <div className="flex-1 bg-gray-200 rounded-full h-2">
-                                                    <div
-                                                        className={`h-2 rounded-full transition-all duration-300 ${
-                                                            computeStrength(secret.password) === 'Strong'
-                                                                ? 'bg-green-500 w-full'
-                                                                : computeStrength(secret.password) === 'Medium'
-                                                                    ? 'bg-yellow-500 w-2/3'
-                                                                    : 'bg-red-500 w-1/3'
-                                                        }`}
-                                                    ></div>
+                                                <span className="text-xl" aria-label="Password icon" role="img">🔑</span>
+                                                <div>
+                                                    <div className="text-sm font-semibold text-gray-900 truncate">
+                                                        {secret.title || secret.website || 'Untitled'}
+                                                    </div>
+                                                    {secret.username || secret.email ? (
+                                                        <div className="text-xs text-gray-500 truncate mt-0.5">
+                                                            {secret.username || secret.email}
+                                                        </div>
+                                                    ) : null}
                                                 </div>
-                                                <span className={`text-sm font-medium ${getStrengthColor(computeStrength(secret.password))}`}>
+                                            </div>
+                                            <div className="flex items-center space-x-2">
+                                                <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                                                    strength === 'Strong' ? 'bg-green-100 text-green-700' :
+                                                        strength === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                                                            'bg-red-100 text-red-700'
+                                                }`} title={`Password strength: ${strength}`}>{strength}</span>
+                                                <span className={`text-gray-400 transition-transform duration-200 ${
+                                                    selectedSecret?.id === secret.id ? 'rotate-180' : ''
+                                                }`}>
+                                                    ▼
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </button>
+
+                                    {/* Expanded details */}
+                                    {selectedSecret?.id === secret.id && (
+                                        <div className="border-t border-gray-100 bg-gray-50 p-4 space-y-4">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <h4 className="text-sm font-semibold text-gray-900">Password Details</h4>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); setSelectedSecret(null); }}
+                                                    className="text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-full p-1 transition-colors"
+                                                >
+                                                    ✕
+                                                </button>
+                                            </div>
+
+                                            {/* Website URL */}
+                                            {secret.website && (
+                                                <div className="space-y-1">
+                                                    <label className="block text-xs font-medium text-gray-700">Website</label>
+                                                    <div className="flex items-center space-x-2">
+                                                        <input
+                                                            type="text"
+                                                            value={secret.website}
+                                                            readOnly
+                                                            className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-md focus:outline-none"
+                                                        />
+                                                        <CopyButton text={secret.website} type="website" secretId={secret.id} />
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Username */}
+                                            {(secret.username || secret.email) && (
+                                                <div className="space-y-1">
+                                                    <label className="block text-xs font-medium text-gray-700">Username</label>
+                                                    <div className="flex items-center space-x-2">
+                                                        <input
+                                                            type="text"
+                                                            value={secret.username || secret.email}
+                                                            readOnly
+                                                            className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-md focus:outline-none"
+                                                        />
+                                                        <CopyButton text={secret.username || secret.email} type="username" secretId={secret.id} />
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Password */}
+                                            {secret.password && (
+                                                <div className="space-y-1">
+                                                    <label className="block text-xs font-medium text-gray-700">Password</label>
+                                                    <div className="flex items-center space-x-2">
+                                                        <input
+                                                            type={visiblePasswords[secret.id] ? 'text' : 'password'}
+                                                            value={secret.password}
+                                                            readOnly
+                                                            className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-md focus:outline-none"
+                                                        />
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); togglePasswordVisibility(secret.id); }}
+                                                            className="p-2 text-gray-600 hover:text-gray-900 hover:bg-white border border-gray-200 rounded-md transition-colors"
+                                                        >
+                                                            {visiblePasswords[secret.id] ? '🙈' : '👁️'}
+                                                        </button>
+                                                        <CopyButton text={secret.password} type="password" secretId={secret.id} />
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Password Strength */}
+                                            <div className="space-y-2">
+                                                <label className="block text-xs font-medium text-gray-700">Password Strength</label>
+                                                <div className="flex items-center space-x-3">
+                                                    <div className="flex-1 bg-gray-200 rounded-full h-2">
+                                                        <div
+                                                            className={`h-2 rounded-full transition-all duration-300 ${
+                                                                computeStrength(secret.password) === 'Strong'
+                                                                    ? 'bg-green-500 w-full'
+                                                                    : computeStrength(secret.password) === 'Medium'
+                                                                        ? 'bg-yellow-500 w-2/3'
+                                                                        : 'bg-red-500 w-1/3'
+                                                            }`}
+                                                        ></div>
+                                                    </div>
+                                                    <span className={`text-sm font-medium ${getStrengthColor(computeStrength(secret.password))}`}>
                                         {computeStrength(secret.password)}
                                     </span>
+                                                </div>
+                                            </div>
+
+                                            {/* Actions */}
+                                            <div className="flex space-x-3 pt-3 border-t border-gray-200">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); openEditForm(secret); }}
+                                                    className="flex-1 px-4 py-2 text-sm font-medium bg-amber-500 text-white rounded-md hover:bg-amber-600 transition-colors"
+                                                >
+                                                    Edit
+                                                </button>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(secret); }}
+                                                    className="flex-1 px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                                                >
+                                                    Delete
+                                                </button>
                                             </div>
                                         </div>
-
-                                        {/* Actions */}
-                                        <div className="flex space-x-3 pt-3 border-t border-gray-200">
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); openEditForm(secret); }}
-                                                className="flex-1 px-4 py-2 text-sm font-medium bg-amber-500 text-white rounded-md hover:bg-amber-600 transition-colors"
-                                            >
-                                                Edit
-                                            </button>
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); setDeleteTarget(secret); }}
-                                                className="flex-1 px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
-                                            >
-                                                Delete
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                            </li>
-                        );
-                    })}
-                </ul>
+                                    )}
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )}
             </nav>
             {/* Create secret panel */}
             {showCreate && (
