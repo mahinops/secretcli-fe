@@ -160,12 +160,20 @@ const SecretsDashboard = () => {
         const scheduleRetry = (delayMs) => {
             if (retryTimeoutRefLocal.current) clearTimeout(retryTimeoutRefLocal.current)
             retryTimeoutRefLocal.current = setTimeout(() => {
-                if (!cancelled) fetchSecrets()
+                if (!cancelled) {
+                    fetchSecrets().catch(err => {
+                        console.error('Scheduled retry failed:', err);
+                        setError('Failed to load secrets. Please try again.');
+                    });
+                }
             }, delayMs)
         }
 
 
-        fetchSecrets()
+        fetchSecrets().catch(err => {
+            console.error('Effect fetch failed:', err);
+            setError('Failed to load secrets. Please try again.');
+        });
         return () => {
             cancelled = true
             if (retryTimeoutRefLocal.current) clearTimeout(retryTimeoutRefLocal.current)
@@ -187,7 +195,10 @@ const SecretsDashboard = () => {
                     // Best-effort refresh without blocking UX
                     api.get('/secret/api/list')
                         .then(res => setSecrets(res.data?.data?.secrets || []))
-                        .catch(() => {/* ignore */})
+                        .catch(err => {
+                            console.error('Failed to refresh secrets after delete:', err);
+                            setError('Failed to refresh the list. Please reload the page.');
+                        })
                 }
                 return next
             })
@@ -312,7 +323,12 @@ const SecretsDashboard = () => {
                 email: createForm.email,
                 website: createForm.website,
             })
-            await refreshSecretsAfterCreate()
+            try {
+                await refreshSecretsAfterCreate()
+            } catch (refreshErr) {
+                console.error('Failed to refresh after create:', refreshErr);
+                setError('Secret created but failed to refresh list. Please reload the page.');
+            }
             closeCreatePanel()
         } catch (err) {
             const status = err?.response?.status

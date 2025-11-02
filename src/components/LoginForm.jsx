@@ -23,7 +23,7 @@ const LoginForm = () => {
             setError('Please enter a valid email address.');
             return;
         }
-        if (password.length < 2) {
+        if (password.length < 6) {
             setError('Password must be at least 6 characters.');
             return;
         }

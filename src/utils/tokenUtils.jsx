@@ -4,10 +4,13 @@ export const isTokenExpired = () => {
     if (!token) return true;
 
     try {
-        // Decode JWT token to check expiry
-        const payload = JSON.parse(atob(token.split('.')[1]));
+        const parts = token.split('.');
+        if (parts.length !== 3) return true;
+        
+        const payload = JSON.parse(atob(parts[1]));
+        if (!payload.exp) return false;
+        
         const currentTime = Date.now() / 1000;
-
         return payload.exp < currentTime;
     } catch (error) {
         console.error('Error checking token expiry:', error);

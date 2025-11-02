@@ -40,7 +40,7 @@ const RegisterForm = () => {
         }
         try {
             const res = await api.post('/auth/api/register', { name, email, password });
-            const token = res.data.token;
+            const token = res.data?.data?.token || res.data?.token;
             if (token) {
                 localStorage.setItem('token', token);
                 navigate('/dashboard');
