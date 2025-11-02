@@ -448,7 +448,7 @@ const SecretsDashboard = () => {
                                                             readOnly
                                                             className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-md focus:outline-none"
                                                         />
-                                                        <CopyButton text={secret.website} type="website" secretId={secret.id} />
+                                                        <CopyButton text={secret.website} type="website" secretId={secret.id} isCopied={copiedItems[`${secret.id}-website`]} onCopy={copyToClipboard} />
                                                     </div>
                                                 </div>
                                             )}
@@ -464,7 +464,7 @@ const SecretsDashboard = () => {
                                                             readOnly
                                                             className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-md focus:outline-none"
                                                         />
-                                                        <CopyButton text={secret.username || secret.email} type="username" secretId={secret.id} />
+                                                        <CopyButton text={secret.username || secret.email} type="username" secretId={secret.id} isCopied={copiedItems[`${secret.id}-username`]} onCopy={copyToClipboard} />
                                                     </div>
                                                 </div>
                                             )}
@@ -486,7 +486,7 @@ const SecretsDashboard = () => {
                                                         >
                                                             {visiblePasswords[secret.id] ? '🙈' : '👁️'}
                                                         </button>
-                                                        <CopyButton text={secret.password} type="password" secretId={secret.id} />
+                                                        <CopyButton text={secret.password} type="password" secretId={secret.id} isCopied={copiedItems[`${secret.id}-password`]} onCopy={copyToClipboard} />
                                                     </div>
                                                 </div>
                                             )}
