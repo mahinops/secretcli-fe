@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback, useMemo } from 'react';
 import api from '../api';
 
 const ErrorMessage = React.memo(({ message }) => (
@@ -16,12 +16,12 @@ const PasswordGenerator = () => {
     const [error, setError] = useState('');
     const [cooldown, setCooldown] = useState(false);
     const inFlightRef = useRef(false);
-    const COOLDOWN_MS = 600;
+    const COOLDOWN_MS = useMemo(() => 600, []);
 
     const startCooldown = useCallback((ms = COOLDOWN_MS) => {
         setCooldown(true);
         setTimeout(() => setCooldown(false), ms);
-    }, []);
+    }, [COOLDOWN_MS]);
 
     const generatePassword = useCallback(async () => {
         if (inFlightRef.current || loading || cooldown) return;

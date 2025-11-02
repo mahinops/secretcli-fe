@@ -106,18 +106,32 @@ const SecretsDashboard = () => {
         }
     };
 
+    // Memoized secrets with pre-calculated strength
+    const secretsWithStrength = useMemo(() => {
+        const secretsArray = Array.isArray(secrets) ? secrets : [];
+        return secretsArray.map(secret => ({
+            ...secret,
+            strength: computeStrength(secret.password)
+        }));
+    }, [secrets]);
+
     // Memoized filtered secrets with proper type checking
     const filteredSecrets = useMemo(() => {
-        // Ensure secrets is always an array
-        const secretsArray = Array.isArray(secrets) ? secrets : [];
-        if (!debouncedSearch) return secretsArray;
-        return secretsArray.filter(secret =>
-            (secret?.title || '').toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-            (secret?.username || '').toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-            (secret?.email || '').toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-            (secret?.website || '').toLowerCase().includes(debouncedSearch.toLowerCase())
-        );
-    }, [secrets, debouncedSearch]);
+        if (!debouncedSearch) return secretsWithStrength;
+        
+        const searchLower = debouncedSearch.toLowerCase();
+        return secretsWithStrength.filter(secret => {
+            const title = secret?.title || '';
+            const username = secret?.username || '';
+            const email = secret?.email || '';
+            const website = secret?.website || '';
+            
+            return title.toLowerCase().includes(searchLower) ||
+                   username.toLowerCase().includes(searchLower) ||
+                   email.toLowerCase().includes(searchLower) ||
+                   website.toLowerCase().includes(searchLower);
+        });
+    }, [secretsWithStrength, debouncedSearch]);
 
     // Password visibility toggle
     const togglePasswordVisibility = useCallback((secretId) => {
@@ -396,7 +410,7 @@ const SecretsDashboard = () => {
                 ) : (
                     <ul className="space-y-2">
                         {filteredSecrets.map((secret) => {
-                            const strength = computeStrength(secret.password);
+                            const strength = secret.strength;
                             const key = `${secret.id}-password`;
                             return (
                                 <li key={secret.id} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
@@ -514,16 +528,16 @@ const SecretsDashboard = () => {
                                                     <div className="flex-1 bg-gray-200 rounded-full h-2">
                                                         <div
                                                             className={`h-2 rounded-full transition-all duration-300 ${
-                                                                computeStrength(secret.password) === 'Strong'
+                                                                secret.strength === 'Strong'
                                                                     ? 'bg-green-500 w-full'
-                                                                    : computeStrength(secret.password) === 'Medium'
+                                                                    : secret.strength === 'Medium'
                                                                         ? 'bg-yellow-500 w-2/3'
                                                                         : 'bg-red-500 w-1/3'
                                                             }`}
                                                         ></div>
                                                     </div>
-                                                    <span className={`text-sm font-medium ${getStrengthColor(computeStrength(secret.password))}`}>
-                                        {computeStrength(secret.password)}
+                                                    <span className={`text-sm font-medium ${getStrengthColor(secret.strength)}`}>
+                                        {secret.strength}
                                     </span>
                                                 </div>
                                             </div>
