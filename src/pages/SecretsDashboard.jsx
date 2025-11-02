@@ -53,11 +53,11 @@ const SecretsDashboard = () => {
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [editSecret, setEditSecret] = useState(null);
-    const [editForm, setEditForm] = useState({ title: '', username: '', password: '', email: '', website: '', note: '', url: '' });
+    const [editForm, setEditForm] = useState({ title: '', username: '', password: '', email: '', website: '', note: '' });
 
     // Create panel state
     const [showCreate, setShowCreate] = useState(false);
-    const [createForm, setCreateForm] = useState({ title: '', username: '', password: '', email: '', website: '', note: '', url: '' });
+    const [createForm, setCreateForm] = useState({ title: '', username: '', password: '', email: '', website: '', note: '' });
     const [createLoading, setCreateLoading] = useState(false);
     const [createError, setCreateError] = useState('');
 
@@ -208,22 +208,15 @@ const SecretsDashboard = () => {
         const { name, value } = e.target
         setEditForm(prev => ({
             ...prev,
-            [name]: value,
-            // Auto-populate url when website is changed
-            ...(name === 'website' && { url: value })
+            [name]: value
         }))
     }
 
     const handleEditSubmit = async (e) => {
         e.preventDefault()
         try {
-            const { id, ...updatedData } = editForm
-            // Ensure url is included in the update
-            const dataToSend = {
-                ...updatedData,
-                url: updatedData.url || updatedData.website
-            }
-            const res = await api.put(`/secret/api/update/${id}`, dataToSend)
+            const { id, url, ...updatedData } = editForm
+            const res = await api.put(`/secret/api/update/${id}`, updatedData)
             const apiUpdated = res?.data?.data?.secret || res?.data?.secret || null
             const updatedSecret = apiUpdated ? { ...editSecret, ...apiUpdated } : { ...editSecret, ...updatedData, id }
             setSecrets(prev => prev.map(secret => {
@@ -249,14 +242,12 @@ const SecretsDashboard = () => {
         const { name, value } = e.target
         setCreateForm(prev => ({
             ...prev,
-            [name]: value,
-            // Auto-populate url when website is changed
-            ...(name === 'website' && { url: value })
+            [name]: value
         }))
     }
 
     const resetCreateForm = () => {
-        setCreateForm({ title: '', username: '', password: '', email: '', website: '', note: '', url: '' })
+        setCreateForm({ title: '', username: '', password: '', email: '', website: '', note: '' })
         setCreateError('')
         setCreateLoading(false)
     }
@@ -320,7 +311,6 @@ const SecretsDashboard = () => {
                 note: createForm.note,
                 email: createForm.email,
                 website: createForm.website,
-                url: createForm.url || createForm.website,
             })
             await refreshSecretsAfterCreate()
             closeCreatePanel()
