@@ -1,32 +1,64 @@
-# PassAPI — React Password Manager Frontend
+# 🔐 PassAPI — React Password Manager Frontend
 
-A minimal password manager frontend built with React, Vite, React Router, Axios, and Tailwind CSS. It provides authentication (login/register), a secrets dashboard to list/create/edit/delete secrets, and a password generator that can request strong passwords from the backend API.
+A modern, secure password manager frontend built with React 19, featuring a clean interface for managing secrets, generating strong passwords, and secure authentication. Designed with performance, security, and user experience in mind.
 
-Note: This repository contains only the frontend. You need a compatible backend API running locally for full functionality.
+## 🎥 Project Overview
+
+PassAPI is a full-featured password manager that helps users securely store, manage, and generate passwords. The frontend provides an intuitive interface for:
+
+- **Secure Authentication**: JWT-based login/register system
+- **Password Management**: Store, organize, and access your credentials
+- **Password Generation**: Create strong, customizable passwords
+- **Security Features**: Password strength analysis, secure clipboard operations
+- **Modern UI/UX**: Responsive design with smooth interactions
+
+> **Note**: This repository contains only the frontend. You need a compatible backend API running locally for full functionality.
 
 
 ## Features
-- Authentication UI: Login and Register (JWT token stored in localStorage)
-- Protected routes via a lightweight RequireAuth wrapper
-- Secrets dashboard
-  - List your secrets with favicon, masked/unmasked password view
-  - Copy password/email to clipboard
-  - Create, edit, and delete secrets
-  - Gentle client-side handling of API rate limits (429)
-- Password generator page
-  - Configure length and include special symbols
-  - Copy-to-clipboard
-- Clean layout with sidebar navigation and logout button
-- Built with Vite + React and Tailwind CSS v4
+
+### 🔐 Security & Authentication
+- Secure JWT-based authentication with token expiry validation
+- Protected routes with automatic redirect on session expiry
+- Comprehensive error boundaries for graceful error handling
+- Input validation and sanitization
+
+### 📊 Secrets Management
+- **Dashboard**: List, search, and manage all your secrets
+- **Password Visibility**: Toggle between masked/unmasked password view
+- **Password Strength**: Real-time strength indicator with visual feedback
+- **Quick Actions**: Copy passwords, emails, and websites to clipboard
+- **CRUD Operations**: Create, edit, and delete secrets with validation
+- **Search & Filter**: Fast search across titles, usernames, emails, and websites
+
+### 🔑 Password Generator
+- **Customizable Length**: Generate passwords from 6-64 characters
+- **Special Characters**: Toggle special symbols inclusion
+- **Rate Limiting**: Built-in cooldown to prevent API abuse
+- **One-Click Copy**: Instant clipboard integration
+
+### 🎨 User Experience
+- **Responsive Design**: Clean, modern interface with Tailwind CSS v4
+- **Sidebar Navigation**: Intuitive navigation with active state indicators
+- **Loading States**: Visual feedback for all async operations
+- **Error Handling**: User-friendly error messages and recovery options
+- **Performance Optimized**: Memoized components and efficient re-renders
+
+### 🛠️ Technical Features
+- **React 19** with modern hooks and functional components
+- **Vite 7** for fast development and optimized builds
+- **Error Boundaries** for robust error handling
+- **Component Architecture**: Modular, reusable components
+- **Performance Monitoring**: Optimized for minimal re-renders
 
 
-## Tech Stack
-- React 19
-- Vite 7
-- React Router DOM 7
-- Axios
-- Tailwind CSS 4 (via @tailwindcss/vite plugin)
-- ESLint (optional for development)
+## 🛠️ Tech Stack
+- **React 19** - Modern React with hooks and functional components
+- **Vite 7** - Fast build tool and development server
+- **React Router DOM 7** - Client-side routing with protected routes
+- **Axios** - HTTP client with request/response interceptors
+- **Tailwind CSS 4** - Utility-first CSS framework via Vite plugin
+- **ESLint** - Code linting and quality assurance
 
 
 ## Prerequisites
@@ -153,5 +185,28 @@ Tailwind v4 is enabled via the official Vite plugin (@tailwindcss/vite). Global 
 - npm run preview — Preview the production build
 - npm run lint — Run ESLint
 
+
+## 🚀 Recent Improvements
+
+### Security Enhancements
+- Fixed critical hardcoded credentials vulnerability
+- Enhanced JWT token validation with expiry checking
+- Improved input validation and error handling
+
+### Performance Optimizations
+- Memoized expensive computations (password strength, search filtering)
+- Optimized component re-renders with proper dependency management
+- Reduced unnecessary API calls with intelligent caching
+
+### Code Quality
+- Added comprehensive error boundaries for graceful error handling
+- Refactored complex components into smaller, maintainable modules
+- Improved component architecture with better separation of concerns
+- Enhanced user feedback with better loading states and error messages
+
+### Developer Experience
+- Modular component structure for better maintainability
+- Consistent error handling patterns across the application
+- Improved code organization with dedicated routes and components directories
 
 ## License
