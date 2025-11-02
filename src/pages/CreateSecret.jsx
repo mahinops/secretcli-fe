@@ -27,12 +27,11 @@ const CreateSecret = () => {
                 email: form.email,
                 website: form.website,
             }
-            const res = await api.post('/secret/api/create', payload)
-            const code = res?.data?.code
-            if (code !== 201) {
-                throw new Error(res?.data?.message || 'Failed to create secret')
+            if (!form.title.trim()) {
+                setError('Title is required');
+                return;
             }
-            alert('Secret created successfully')
+            const res = await api.post('/secret/api/create', payload)
             navigate('/dashboard')
         } catch (err) {
             const status = err?.response?.status
